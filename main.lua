@@ -26,15 +26,30 @@ local function encode_uri(path)
 	end))
 end
 
-local selected_or_hovered = ya.sync(function()
-	local tab, paths = cx.active, {}
+--- Work out which files to publish, and whether Yazi considers them cut.
+---
+--- Yazi's own `yank` clears the visual selection as it fills the yank buffer,
+--- so a binding chained as [ "yank --cut", "plugin wayclip" ] finds an empty
+--- selection by the time the plugin runs. The yank buffer is therefore the
+--- first place to look, and it carries `is_cut` with it.
+local sources = ya.sync(function()
+	local paths = {}
+
+	if #cx.yanked > 0 then
+		for _, file in pairs(cx.yanked) do
+			paths[#paths + 1] = tostring(file.url)
+		end
+		return paths, cx.yanked.is_cut
+	end
+
+	local tab = cx.active
 	for _, u in pairs(tab.selected) do
 		paths[#paths + 1] = tostring(u)
 	end
 	if #paths == 0 and tab.current.hovered then
 		paths[1] = tostring(tab.current.hovered.url)
 	end
-	return paths
+	return paths, false
 end)
 
 --- Hand `body` to wl-copy under a single MIME type.
@@ -67,12 +82,25 @@ local function read_clipboard(mime)
 	return output.stdout ~= "" and output.stdout or nil
 end
 
-local function uri_lines(paths)
+local function uris(paths)
 	local out = {}
 	for _, path in ipairs(paths) do
 		out[#out + 1] = "file://" .. encode_uri(path)
 	end
-	return table.concat(out, "\r\n") .. "\r\n"
+	return out
+end
+
+--- text/uri-list is CRLF terminated per RFC 2483.
+local function uri_list(paths)
+	return table.concat(uris(paths), "\r\n") .. "\r\n"
+end
+
+--- x-special/gnome-copied-files is a different format: the word "cut" or
+--- "copy", then one LF and one URI per file, with no trailing newline. Reusing
+--- the CRLF form here leaves a carriage return on the end of every URI, which
+--- GNOME file managers then fail to resolve.
+local function gnome_copied_files(paths, cut)
+	return (cut and "cut" or "copy") .. "\n" .. table.concat(uris(paths), "\n")
 end
 
 --- Decide what the clipboard is offering, and whether it is a cut.
@@ -110,12 +138,18 @@ local spawn_tasks = ya.sync(function(_, list, kind)
 	return count
 end)
 
-local function put(cut)
+--- `forced` is true or false to override, or nil to follow Yazi's yank buffer.
+local function put(forced)
 	ya.emit("escape", { visual = true })
 
-	local paths = selected_or_hovered()
+	local paths, yanked_cut = sources()
 	if #paths == 0 then
 		return notify("Nothing selected or hovered.", "warn")
+	end
+
+	local cut = forced
+	if cut == nil then
+		cut = yanked_cut
 	end
 
 	local body, mime
@@ -123,10 +157,10 @@ local function put(cut)
 		-- Only x-special/gnome-copied-files can express a cut, so a cut is
 		-- published under that type alone. See "Limitations" in the README.
 		mime = "x-special/gnome-copied-files"
-		body = "cut\n" .. uri_lines(paths)
+		body = gnome_copied_files(paths, true)
 	else
 		mime = "text/uri-list"
-		body = uri_lines(paths)
+		body = uri_list(paths)
 	end
 
 	local ok, err = write_clipboard(mime, body)
@@ -158,8 +192,11 @@ return {
 	end,
 
 	entry = function(_, job)
-		local action = (job.args or {})[1] or "copy"
-		if action == "copy" then
+		local action = (job.args or {})[1]
+		if action == nil or action == "yank" then
+			-- Mirror Yazi's yank buffer, copy or cut as Yazi has it.
+			put(nil)
+		elseif action == "copy" then
 			put(false)
 		elseif action == "cut" then
 			put(true)

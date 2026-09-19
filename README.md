@@ -27,12 +27,12 @@ Add three bindings to your `keymap.toml`:
 ```toml
 [[mgr.prepend_keymap]]
 on   = "y"
-run  = [ "yank", "plugin wayclip copy" ]
+run  = [ "yank", "plugin wayclip" ]
 desc = "Yank selected files (also to system clipboard)"
 
 [[mgr.prepend_keymap]]
 on   = "x"
-run  = [ "yank --cut", "plugin wayclip cut" ]
+run  = [ "yank --cut", "plugin wayclip" ]
 desc = "Cut selected files (also to system clipboard)"
 
 [[mgr.prepend_keymap]]
@@ -45,8 +45,17 @@ Chaining onto `y` and `x` keeps Yazi's own yank buffer intact, so `p` still
 pastes what you yanked inside Yazi and `<C-p>` pastes whatever the desktop is
 holding. The two buffers stay independent.
 
-Each action works on the current selection, falling back to the hovered file
-when nothing is selected.
+With no action argument the plugin mirrors Yazi's yank buffer, publishing a cut
+when Yazi has one and a copy otherwise. That is why the same `plugin wayclip`
+call works for both bindings above.
+
+If you would rather not involve Yazi's yank buffer, `plugin wayclip copy` and
+`plugin wayclip cut` force the action. In that case the plugin uses the current
+selection, falling back to the hovered file when nothing is selected.
+
+Reading the yank buffer matters when chaining. Yazi's own `yank` clears the
+visual selection as it fills the buffer, so by the time a chained plugin runs
+the selection is already empty and only the hovered file would be published.
 
 Optionally, set the notification timeout in your `init.lua`:
 
