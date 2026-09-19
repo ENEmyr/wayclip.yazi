@@ -26,14 +26,14 @@ Add three bindings to your `keymap.toml`:
 
 ```toml
 [[mgr.prepend_keymap]]
-on   = "<C-c>"
-run  = "plugin wayclip copy"
-desc = "Copy selected files to system clipboard"
+on   = "y"
+run  = [ "yank", "plugin wayclip copy" ]
+desc = "Yank selected files (also to system clipboard)"
 
 [[mgr.prepend_keymap]]
-on   = "<C-x>"
-run  = "plugin wayclip cut"
-desc = "Cut selected files to system clipboard"
+on   = "x"
+run  = [ "yank --cut", "plugin wayclip cut" ]
+desc = "Cut selected files (also to system clipboard)"
 
 [[mgr.prepend_keymap]]
 on   = "<C-p>"
@@ -41,9 +41,9 @@ run  = "plugin wayclip paste"
 desc = "Paste files from system clipboard"
 ```
 
-These are examples. Note that `<C-c>` is bound to `close` in Yazi's defaults, so
-binding it here replaces the default way to close a tab. Pick different keys if
-you would rather keep it.
+Chaining onto `y` and `x` keeps Yazi's own yank buffer intact, so `p` still
+pastes what you yanked inside Yazi and `<C-p>` pastes whatever the desktop is
+holding. The two buffers stay independent.
 
 Each action works on the current selection, falling back to the hovered file
 when nothing is selected.
